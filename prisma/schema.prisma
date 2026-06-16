@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Les rôles possibles pour l'application style Massar
+enum Role {
+  ETUDIANT
+  PROFESSEUR
+  ADMIN
+}
+
+enum TypeEvaluation {
+  CC
+  TP
+  EXAMEN_FINAL
+}
+
+model Utilisateur {
+  id              Int       @id @default(autoincrement())
+  nom             String
+  prenom          String
+  email           String    @unique
+  motDePasse      String
+  role            Role
+  identifiantAcad String?   // Code Massar / CNE pour l'étudiant
+  specialite      String?   // Seulement pour le professeur
+
+  // Relations
+  filiereId          Int?
+  filiere            Filiere?  @relation(fields: [filiereId], references: [id])
+  matieresEnseignees Matiere[] @relation("ProfesseurMatiere")
+  notesRecues        Note[]
+  absences           Absence[]
+}
+
+model Filiere {
+  id           Int           @id @default(autoincrement())
+  nomFiliere   String
+  etudiants    Utilisateur[]
+  semestres    Semestre[]
+}
+
+model Semestre {
+  id          Int      @id @default(autoincrement())
+  nomSemestre String
+  filiereId   Int
+  filiere     Filiere  @relation(fields: [filiereId], references: [id])
+  modules     Module[]
+}
+
+model Module {
+  id         Int       @id @default(autoincrement())
+  nomModule  String
+  semestreId Int
+  semestre   Semestre  @relation(fields: [semestreId], references: [id])
+  matieres   Matiere[]
+}
+
+model Matiere {
+  id           Int          @id @default(autoincrement())
+  nomMatiere   String
+  coefficient  Float        @default(1.0)
+  moduleId     Int
+  module       Module       @relation(fields: [moduleId], references: [id])
+  professeurId Int?
+  professeur   Utilisateur? @relation("ProfesseurMatiere", fields: [professeurId], references: [id])
+  notes        Note[]
+  absences     Absence[]
+}
+
+model Note {
+  id             Int            @id @default(autoincrement())
+  valeur         Float
+  typeEvaluation TypeEvaluation
+  etudiantId     Int
+  etudiant       Utilisateur    @relation(fields: [etudiantId], references: [id])
+  matiereId      Int
+  matiere        Matiere        @relation(fields: [matiereId], references: [id])
+  dateSaisie     DateTime       @default(now())
+}
+
+// ---- LA NOUVELLE TABLE POUR LE SUIVI DES ABSENCES ----
+model Absence {
+  id          Int         @id @default(autoincrement())
+  dateAbsence DateTime
+  justifiee   Boolean     @default(false)
+  motif       String?     // Optionnel (ex: Certificat médical)
+  etudiantId  Int
+  etudiant    Utilisateur @relation(fields: [etudiantId], references: [id])
+  matiereId   Int
+  matiere     Matiere     @relation(fields: [matiereId], references: [id])
+}
