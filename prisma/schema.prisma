@@ -78,7 +78,7 @@ model Note {
   valeur         Float
   typeEvaluation TypeEvaluation
   etudiantId     Int
-  etudiant       Utilisateur    @relation(fields: [etudiantId], references: [id])
+  etudiant       Utilisateur    @relation(fields: [etudiantId], references: [id], onDelete: Cascade) // 🔥 Ajouté
   matiereId      Int
   matiere        Matiere        @relation(fields: [matiereId], references: [id])
   dateSaisie     DateTime       @default(now())
@@ -91,7 +91,7 @@ model Absence {
   justifiee   Boolean     @default(false)
   motif       String?     // Optionnel (ex: Certificat médical)
   etudiantId  Int
-  etudiant    Utilisateur @relation(fields: [etudiantId], references: [id])
+  etudiant    Utilisateur @relation(fields: [etudiantId], references: [id], onDelete: Cascade) // 🔥 Ajouté
   matiereId   Int
   matiere     Matiere     @relation(fields: [matiereId], references: [id])
 }
