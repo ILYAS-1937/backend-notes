@@ -43,41 +43,28 @@ router.post('/setup-academic', async (req, res) => {
     res.status(500).json({ erreur: "Erreur lors de l'initialisation des filières." });
   }
 });
-/* ==========================================================================
-   ROUTE DE NETTOYAGE COMPLET (SÉCURISÉE)
-   ========================================================================== */
+
 /* ==========================================================================
    ROUTE DE NETTOYAGE COMPLET (ORDRE SÉCURISÉ AVEC SEMESTRES)
    ========================================================================== */
 router.post('/reset-database', async (req, res) => {
   try {
-    // 1. Supprimer les notes et les absences (dépendances directes)
     await prisma.note.deleteMany({});
     await prisma.absence.deleteMany({});
-
-    // 2. Supprimer les matières
+    await prisma.log.deleteMany({}); // Nettoyage aussi des logs si reset
     await prisma.matiere.deleteMany({});
-
-    // 3. Supprimer les modules
     await prisma.module.deleteMany({});
-
-    // 4. Supprimer les semestres (L'élément qui manquait !)
     await prisma.semestre.deleteMany({});
 
-    // 5. Supprimer tous les utilisateurs SAUF les administrateurs
     await prisma.utilisateur.deleteMany({
-      where: {
-        NOT: { role: 'ADMIN' }
-      }
+      where: { NOT: { role: 'ADMIN' } }
     });
 
-    // 6. Détacher l'admin de toute filière restante
     await prisma.utilisateur.updateMany({
       where: { role: 'ADMIN' },
       data: { filiereId: null }
     });
 
-    // 7. Supprimer enfin toutes les filières en toute sécurité
     await prisma.filiere.deleteMany({});
 
     res.json({ 
@@ -88,6 +75,7 @@ router.post('/reset-database', async (req, res) => {
     res.status(500).json({ erreur: "Erreur lors du nettoyage de la base de données." });
   }
 });
+
 /* ==========================================================================
    2. AUTHENTIFICATION & CONNEXION
    ========================================================================== */
@@ -125,6 +113,14 @@ router.post('/login', async (req, res) => {
     const valide = await bcrypt.compare(motDePasse, user.motDePasse);
     if (!valide) return res.status(400).json({ erreur: "Identifiants invalides." });
 
+    // 🔥 [TÂCHE 1] : Création automatique du Log de connexion
+    await prisma.log.create({
+      data: {
+        userId: user.id,
+        action: "CONNEXION"
+      }
+    });
+
     const enseignement = await prisma.matiere.findFirst({ where: { professeurId: user.id } });
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     
@@ -138,6 +134,7 @@ router.post('/login', async (req, res) => {
       filiereId: user.filiereId
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ erreur: "Erreur serveur login." });
   }
 });
@@ -151,6 +148,65 @@ router.get('/users', async (req, res) => {
     res.json(users);
   } catch (error) {
     res.status(500).json({ erreur: "Erreur liste utilisateurs." });
+  }
+});
+
+/* ==========================================================================
+   🔥 NOUVEAU [TÂCHE 1] : ROUTE POUR OBTENIR TOUS LES LOGS (POUR L'ADMIN)
+   ========================================================================== */
+router.get('/admin/logs', async (req, res) => {
+  try {
+    const logs = await prisma.log.findMany({
+      include: {
+        user: {
+          select: { nom: true, prenom: true, email: true, role: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' } // Plus récent au plus ancien
+    });
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ erreur: "Erreur lors de la récupération des traces." });
+  }
+});
+
+/* ==========================================================================
+   🔥 NOUVEAU [TÂCHE 2] : ROUTE DE SUPERVISION PROFS / ÉTUDIANTS POUR L'ADMIN
+   ========================================================================== */
+router.get('/users/:id/profile', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) return res.status(400).json({ erreur: "ID invalide." });
+
+    const user = await prisma.utilisateur.findUnique({
+      where: { id: userId },
+      include: {
+        filiere: true, // Filière de l'étudiant
+        matieresEnseignees: {
+          include: {
+            module: {
+              include: {
+                semestre: { include: { filiere: true } } // Pour voir la filière de la matière du prof
+              }
+            }
+          }
+        },
+        notesRecues: {
+          include: { matiere: true },
+          orderBy: { dateSaisie: 'desc' }
+        },
+        absences: {
+          include: { matiere: true },
+          orderBy: { dateAbsence: 'desc' }
+        }
+      }
+    });
+
+    if (!user) return res.status(404).json({ erreur: "Utilisateur non trouvé." });
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erreur: "Erreur lors de la récupération du profil." });
   }
 });
 
@@ -233,7 +289,6 @@ router.post('/absences/retirer', async (req, res) => {
   }
 });
 
-// NOUVEAU : Justifier 1 heure d'absence (Passer de NJ à J)
 router.post('/absences/justifier', async (req, res) => {
   try {
     const { etudiantId, matiereId } = req.body;
@@ -253,7 +308,6 @@ router.post('/absences/justifier', async (req, res) => {
   }
 });
 
-// NOUVEAU : Rendre injustifiée 1 heure d'absence (Passer de J à NJ)
 router.post('/absences/injustifier', async (req, res) => {
   try {
     const { etudiantId, matiereId } = req.body;
@@ -274,7 +328,7 @@ router.post('/absences/injustifier', async (req, res) => {
 });
 
 /* ==========================================================================
-   4. NOUVEAU : LOGIQUE AUTOMATIQUE DE RATTRAPAGE (< 12.00)
+   4. LOGIQUE AUTOMATIQUE DE RATTRAPAGE (< 12.00)
    ========================================================================== */
 router.get('/rattrapages/liste-globale', async (req, res) => {
   try {
@@ -335,14 +389,12 @@ router.get('/academic-structure', async (req, res) => {
 
 router.post('/matieres', async (req, res) => {
   try {
-    // Le serveur reçoit maintenant directement l'ID de la filière sélectionnée
     const { nomMatiere, filiereId } = req.body; 
 
     if (!filiereId) {
       return res.status(400).json({ erreur: "Filière manquante." });
     }
 
-    // 1. Vérifier si un Semestre existe pour cette filière, sinon le créer automatiquement
     let semestre = await prisma.semestre.findFirst({
       where: { filiereId: parseInt(filiereId) }
     });
@@ -352,7 +404,6 @@ router.post('/matieres', async (req, res) => {
       });
     }
 
-    // 2. Vérifier si un Module existe pour ce semestre, sinon le créer automatiquement
     let moduleParent = await prisma.module.findFirst({
       where: { semestreId: semestre.id }
     });
@@ -362,7 +413,6 @@ router.post('/matieres', async (req, res) => {
       });
     }
 
-    // 3. Créer la matière finale rattachée de manière sécurisée
     const nouvelleMatiere = await prisma.matiere.create({
       data: { 
         nomMatiere, 
