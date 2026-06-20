@@ -29,6 +29,7 @@ model Utilisateur {
   role            Role
   identifiantAcad String?   // Code Massar / CNE pour l'étudiant
   specialite      String?   // Seulement pour le professeur
+  logs     Log[]    // 🔥 Ajoute cette ligne pour l'historique
 
   // Relations
   filiereId          Int?
@@ -95,3 +96,10 @@ model Absence {
   matiereId   Int
   matiere     Matiere     @relation(fields: [matiereId], references: [id])
 }
+model Log {
+     id        Int         @id @default(autoincrement())
+     userId    Int
+     user      Utilisateur @relation(fields: [userId], references: [id], onDelete: Cascade)
+     action    String      // Exemple: "CONNEXION" ou "DECONNEXION"
+     createdAt DateTime    @default(now())
+   }
