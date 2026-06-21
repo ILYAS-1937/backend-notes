@@ -256,6 +256,18 @@ router.post('/notes/save-single', async (req, res) => {
         data: { valeur: parseFloat(valeur), typeEvaluation: typeEvaluation as TypeEvaluation, etudiantId: parseInt(etudiantId), matiereId: parseInt(matiereId) }
       });
     }
+
+    // 🔥 [TÂCHE 3] : Enregistrement automatique de la trace d'audit lors de la Saisie des Notes
+    const matiere = await prisma.matiere.findUnique({ where: { id: parseInt(matiereId) } });
+    if (matiere && matiere.professeurId) {
+      await prisma.log.create({
+        data: {
+          userId: matiere.professeurId,
+          action: "Saisie des notes"
+        }
+      });
+    }
+
     res.json({ message: "Note sauvegardée" });
   } catch (error) {
     res.status(500).json({ erreur: "Erreur note." });
@@ -441,7 +453,19 @@ router.post('/users/assign-prof', async (req, res) => {
 
 router.get('/notes/mes-notes/:etudiantId', async (req, res) => {
   try {
-    const notes = await prisma.note.findMany({ where: { etudiantId: parseInt(req.params.etudiantId) }, include: { matiere: true } });
+    const etudiantId = parseInt(req.params.etudiantId);
+
+    // 🔥 [TÂCHE 3] : Enregistrement automatique de la trace d'audit lors de la Consultation des Notes
+    if (!isNaN(etudiantId)) {
+      await prisma.log.create({
+        data: {
+          userId: etudiantId,
+          action: "Visualisation des notes"
+        }
+      });
+    }
+
+    const notes = await prisma.note.findMany({ where: { etudiantId }, include: { matiere: true } });
     res.json(notes);
   } catch (error) {
     res.status(500).json({ erreur: "Erreur bulletins." });
