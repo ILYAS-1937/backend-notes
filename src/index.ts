@@ -17,6 +17,7 @@ app.get('/api/status', (req: Request, res: Response) => {
   res.json({ message: "L'API Massar Clone est en ligne 🚀", status: "OK" });
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Serveur démarré avec succès sur http://localhost:${PORT}`);
+// 🔥 Modification ici : Ajout de '0.0.0.0' pour ouvrir les connexions entrantes à Hugging Face
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`✅ Serveur démarré et accessible sur le port ${PORT}`);
 });
